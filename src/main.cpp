@@ -3,45 +3,55 @@
 //
 
 #include <iostream>
-#include <filesystem>
-#include <set>
-#include <nlohmann/json.hpp>
+#include "HttpServer.hpp"
+#include "Scanner.hpp"
 
-using json = nlohmann::json;
-namespace fs = std::filesystem;
+std::atomic<bool> isShutdown{false};
+std::condition_variable cv;
+std::mutex m;
+
+void signalHandler(int signal) {
+    isShutdown = true;
+    cv.notify_one();
+}
 
 int main(int argc, const char* argv[]) {
-    json j;
-    j["audio"] = json::array();
-    j["video"] = json::array();
-    j["images"] = json::array();
+    auto dir = std::filesystem::path(std::getenv("HOME"));
+    int interval = 10;
 
-    auto homeDir = fs::path(std::getenv("HOME"));
-
-    std::set<std::string> audioExts = {".json", ".wav"};
-    std::set<std::string> imageExts = {".png", ".bmp"};
-    std::set<std::string> videoExts = {".mp4", ".avi"};
-
-    for (const auto& dirEntry: fs::recursive_directory_iterator(homeDir)) {
-        if (!dirEntry.is_regular_file()) {
-            continue;
-        }
-
-        auto ext = dirEntry.path().extension();
-
-        if (audioExts.count(ext))
-        {
-            j["audio"].push_back(dirEntry.path());
-        }
-        else if (videoExts.count(ext)) {
-            j["video"].push_back(dirEntry.path());
-        }
-        else if (imageExts.count(ext)) {
-            j["images"].push_back(dirEntry.path());
-        }
+    if (argc > 1) {
+        dir = argv[1];
+    }
+    if (argc > 2) {
+        interval = std::stoi(argv[2]);
     }
 
-    std::cout << j.dump(4);
+    std::signal(SIGINT, signalHandler);
+    std::signal(SIGTERM, signalHandler);
+
+    HttpServer server{1234};
+    Scanner scanner{dir, interval};
+    scanner.start();
+    server.setGetHandler("/media_files", [&scanner](const auto &req, auto &res) {
+        res.set_content(scanner.getCurrent().dump(4), "application/json");
+    });
+
+    auto serverThread = std::thread([&server]() {
+        server.start();
+    });
+
+    std::unique_lock lock(m);
+    cv.wait(lock, []() {
+        return isShutdown.load();
+    });
+
+    std::cout << "Shutting down...\n";
+
+    server.stop();
+    serverThread.join();
+    scanner.stop();
+
+    std::cout << "Bye\n";
 
     return 0;
 }
