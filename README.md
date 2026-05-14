@@ -47,6 +47,28 @@ curl http://localhost:1234/media_files
 - **video:** `.mp4 .avi .mkv .mov .wmv .flv .webm .m4v .3gp .ts .mts .m2ts .ogv .vp8 .vp9 .av1`
 - **images:** `.png .bmp .jpg .jpeg .gif .tiff .tif .webp .heic .heif .avif .svg`
 
+Поддерживаемые расширения указаны в файле Scanner.hpp
+
+```c++
+    std::unordered_set<std::string> audioExts_ = {
+        ".mp3", ".wav", ".flac", ".aac",
+        ".m4a",".opus", ".wma", ".aiff",
+        ".ape",".dsd",".amr", ".webm"
+    };
+    std::unordered_set<std::string> imageExts_ = {
+        ".png", ".bmp",".jpg", ".jpeg",
+        ".gif",".tiff", ".tif", ".webp",
+        ".heic",".heif",".avif", ".svg",
+    };
+    std::unordered_set<std::string> videoExts_ = {
+        ".mp4", ".avi",".mkv",".mov",
+        ".wmv", ".flv",".webm",".m4v",
+        ".3gp",".ts",".mts", ".m2ts",
+        ".ogv",".vp8", ".vp9", ".av1"
+    };
+
+```
+
 ---
 
 ## Зависимости
