@@ -7,6 +7,8 @@
 #include <nlohmann/json.hpp>
 #include <filesystem>
 #include <atomic>
+#include <condition_variable>
+#include <memory>
 #include <mutex>
 #include <unordered_set>
 #include <thread>
@@ -14,18 +16,15 @@
 using json = nlohmann::json;
 namespace fs = std::filesystem;
 
+
 class Scanner {
 public:
     Scanner(const fs::path &path, int interval);
-
     ~Scanner();
 
     void start();
-
     void stop();
-
-    json getCurrent();
-
+    std::shared_ptr<const json> getCurrent() const;
 private:
     void run();
 
@@ -34,10 +33,11 @@ private:
     fs::path dir_;
     int interval_;
     std::atomic<bool> isRunning_{false};
-    std::mutex m_;
     std::thread thread_;
+    std::mutex stopM_;
+    std::condition_variable stopCv_;
 
-    json currentScan_;
+    std::atomic<std::shared_ptr<const json>> currentScan_;
 
     std::unordered_set<std::string> audioExts_ = {
         ".mp3", ".wav", ".flac", ".aac",

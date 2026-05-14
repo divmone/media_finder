@@ -4,7 +4,9 @@
 
 #include "Scanner.hpp"
 
-#include <bits/this_thread_sleep.h>
+#include <algorithm>
+#include <cctype>
+#include <iostream>
 
 Scanner::Scanner(const fs::path &path, int interval)
     : dir_(path), interval_(interval){
@@ -15,9 +17,8 @@ Scanner::~Scanner() {
     stop();
 }
 
-json Scanner::getCurrent() {
-    std::lock_guard lock(m_);
-    return currentScan_;
+std::shared_ptr<const json> Scanner::getCurrent() const {
+    return currentScan_.load(std::memory_order_acquire);
 }
 
 json Scanner::scan() {
@@ -32,9 +33,9 @@ json Scanner::scan() {
         }
         auto ext = dirEntry.path().extension().string();
 
-        std::transform(ext.begin(), ext.end(), ext.begin(), tolower);
-        if (audioExts_.count(ext))
-        {
+        std::transform(ext.begin(), ext.end(), ext.begin(),
+                       [](unsigned char c) { return std::tolower(c); });
+        if (audioExts_.count(ext)) {
             j["audio"].push_back(dirEntry.path());
         }
         else if (videoExts_.count(ext)) {
@@ -44,17 +45,20 @@ json Scanner::scan() {
             j["images"].push_back(dirEntry.path());
         }
     }
+
+    std::cout << "Scanning is completed: " << dir_ << '\n';
     return j;
 }
 
 void Scanner::start() {
-    currentScan_ = scan();
+    currentScan_.store(std::make_shared<const json>(scan()), std::memory_order_release);
     isRunning_ = true;
     thread_ = std::thread(&Scanner::run, this);
 }
 
 void Scanner::stop() {
     isRunning_ = false;
+    stopCv_.notify_all();
     if (thread_.joinable()) {
         thread_.join();
     }
@@ -62,11 +66,12 @@ void Scanner::stop() {
 
 void Scanner::run() {
     while (isRunning_) {
-        std::this_thread::sleep_for(std::chrono::seconds(interval_));
-        json newScan = scan();
-        {
-            std::lock_guard lock(m_);
-            currentScan_ = newScan;
+        std::unique_lock lock(stopM_);
+        if (stopCv_.wait_for(lock, std::chrono::seconds(interval_),
+                             [this]{ return !isRunning_.load(); })) {
+            break;
         }
+        auto newScan = std::make_shared<const json>(scan());
+        currentScan_.store(std::move(newScan), std::memory_order_release);
     }
 }

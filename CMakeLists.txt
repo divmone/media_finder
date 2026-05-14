@@ -24,6 +24,7 @@ add_executable(${PROJECT_NAME}
         src/Scanner.cpp
         src/Scanner.hpp
         src/HttpServer.cpp
-        src/HttpServer.hpp)
+        src/HttpServer.hpp
+)
 
 target_link_libraries(${PROJECT_NAME} PRIVATE nlohmann_json::nlohmann_json httplib::httplib)
